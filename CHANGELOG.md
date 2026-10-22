@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-22
+
 ### Added
 - GitHub Copilot CLI provider (`copilot -s --no-ask-user -p`), selectable with
   `commit-quiz.cli copilot` and auto-detected after claude, codex and gemini.
@@ -52,6 +54,7 @@ All notable changes to this project are documented here. The format follows
   terminal or a macOS dialog, and aborts the commit on a wrong answer.
 - `install.sh`, npm packaging (`bin`), MIT license.
 
-[Unreleased]: https://github.com/Cristopheer96/commit-quiz/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Cristopheer96/commit-quiz/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Cristopheer96/commit-quiz/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Cristopheer96/commit-quiz/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Cristopheer96/commit-quiz/releases/tag/v0.1.0
