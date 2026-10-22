@@ -4,6 +4,15 @@ A `pre-commit` hook that verifies the developer **actually read their changes**
 before committing. Useful when AI agents (Claude Code, Cursor, Codex…) generate
 the code and the dev just hits "commit" without reviewing.
 
+Every AI code-review tool reviews the code. This one quizzes **you**.
+
+![commit-quiz asks four statements about your staged diff; a wrong answer aborts the commit and shows what actually changed](docs/demo.gif)
+
+```bash
+npm install -g commit-quiz
+commit-quiz install          # in the repo you want guarded
+```
+
 ## How it works
 
 1. On commit, the hook takes the staged diff (`git diff --cached`).
@@ -26,20 +35,46 @@ job.
 
 ## Privacy
 
-**The staged diff is sent to the AI provider you configure** (Anthropic, OpenAI
-or Google), through the CLI each developer already has installed and under
-their own account — there is no shared key and no middleman server.
+**What is sent?** The staged diff (`git diff --cached`, unified context of 1
+line), truncated to 30 KB, plus a fixed instruction prompt. The diff carries
+the paths of the changed files in its headers, as any diff does. Nothing else:
+no repo name, no git history, no author identity, no other files.
 
-- Nothing else is collected. commit-quiz has **zero telemetry** of its own.
-- Lockfiles, snapshots and SVGs are excluded by default; add your own
-  exclusions for sensitive paths:
+**To whom?** Only to the AI provider you already use, through its own CLI and
+under your own account: `claude` → Anthropic, `codex` → OpenAI, `gemini` →
+Google. The diff goes from your machine to that provider's API, the same path
+it takes when you use the CLI directly. There is no commit-quiz server, no
+shared key and no middleman. Which provider is used is yours to pin with
+`git config commit-quiz.cli`.
 
-  ```bash
-  git config commit-quiz.exclude "config/secrets/**"
-  git config --add commit-quiz.exclude "*.pem"
-  ```
+**When?** Only on commits with 20 or more changed lines (configurable), and
+never on merges, rebases or cherry-picks. Everything below the threshold is
+never sent anywhere.
 
-- To keep a whole commit out: `COMMIT_QUIZ=0 git commit …`.
+**What does commit-quiz keep?** Nothing. There is **zero telemetry**. The
+optional debug log (off by default) records timings, the chosen channel and
+your answers, never the diff.
+
+**What is excluded by default?** Lockfiles (`pnpm-lock.yaml`, `package-lock.json`,
+`yarn.lock`, `Gemfile.lock`, `Podfile.lock`), `*.snap` and `*.svg`.
+
+**How do I keep sensitive paths out?** Add git pathspecs, per repo or
+`--global`; the option is repeatable:
+
+```bash
+git config --add commit-quiz.exclude "config/credentials/**"
+git config --add commit-quiz.exclude "*.pem"
+git config --add commit-quiz.exclude "db/seeds/customers.rb"
+```
+
+Excluded files are not sent and do not count toward the line threshold.
+
+**How do I skip it for one commit?** `COMMIT_QUIZ=0 git commit …` (or
+`--no-verify`, which skips every hook).
+
+**Can it run fully local?** Not yet. Providers are a small table in
+`src/providers.js`; a local CLI (for example one backed by Ollama) would be a
+few lines, and contributions are welcome.
 
 If sending diffs to your AI provider is not acceptable in your organization,
 do not install this tool.
