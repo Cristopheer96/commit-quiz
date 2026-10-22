@@ -1,6 +1,6 @@
 {
   "name": "commit-quiz",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pre-commit hook that quizzes the developer on their staged diff — did you actually read your changes?",
   "type": "module",
   "bin": {
@@ -8,8 +8,10 @@
   },
   "files": [
     "bin",
+    "src",
     "install.sh",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"
