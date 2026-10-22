@@ -33,7 +33,14 @@ export const PROVIDERS = {
     args: ['exec', '--skip-git-repo-check', ...(model ? ['--model', model] : [])],
     viaStdin: false,
   }),
-  gemini: (model) => ({ args: ['-p', ...(model ? ['-m', model] : [])], viaStdin: false }),
+  // -p takes the prompt as its value, so it must come last (the prompt is appended)
+  gemini: (model) => ({ args: [...(model ? ['-m', model] : []), '-p'], viaStdin: false }),
+  // GitHub Copilot CLI ignores piped input when -p is passed. -s prints only the
+  // answer; --no-ask-user keeps the agent from waiting on a question nobody sees.
+  copilot: (model) => ({
+    args: ['-s', '--no-ask-user', ...(model ? ['--model', model] : []), '-p'],
+    viaStdin: false,
+  }),
 };
 
 /**

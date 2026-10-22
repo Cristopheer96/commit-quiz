@@ -42,7 +42,8 @@ no repo name, no git history, no author identity, no other files.
 
 **To whom?** Only to the AI provider you already use, through its own CLI and
 under your own account: `claude` → Anthropic, `codex` → OpenAI, `gemini` →
-Google. The diff goes from your machine to that provider's API, the same path
+Google, `copilot` → GitHub (which routes to the model your Copilot plan
+selects). The diff goes from your machine to that provider's API, the same path
 it takes when you use the CLI directly. There is no commit-quiz server, no
 shared key and no middleman. Which provider is used is yours to pin with
 `git config commit-quiz.cli`.
@@ -83,8 +84,10 @@ do not install this tool.
 
 - Node ≥ 18.
 - Some AI CLI on the PATH: [Claude Code](https://claude.com/claude-code)
-  (`claude`), OpenAI Codex CLI (`codex`) or Gemini CLI (`gemini`). The first
-  one found is used, or the one set via config.
+  (`claude`), OpenAI Codex CLI (`codex`), Gemini CLI (`gemini`) or
+  [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli/cli-getting-started)
+  (`copilot`). The first one found is used, in that order, or the one set via
+  config. Teams that already pay for Copilot need no other AI subscription.
 - Native dialogs: macOS out of the box; Linux needs `zenity`. Without a dialog
   backend, editor-UI commits fail open (terminal commits always work).
 
@@ -135,7 +138,7 @@ from editor UIs, where your shell environment does not.
 |---|---|---|---|
 | `COMMIT_QUIZ=0` | — | — | Skips the quiz for that commit (escape hatch) |
 | `COMMIT_QUIZ_MIN_LINES` | `commit-quiz.minlines` | `20` | Minimum changed lines to trigger the quiz |
-| `COMMIT_QUIZ_CLI` | `commit-quiz.cli` | auto | Provider: `claude`, `codex` or `gemini` |
+| `COMMIT_QUIZ_CLI` | `commit-quiz.cli` | auto | Provider: `claude`, `codex`, `gemini` or `copilot` |
 | `COMMIT_QUIZ_MODEL` | `commit-quiz.model` | `haiku` (claude only) | Model that generates the quiz |
 | `COMMIT_QUIZ_LANG` | `commit-quiz.lang` | system locale | Quiz and UI language: `en` or `es` |
 | `COMMIT_QUIZ_TIMEOUT_MS` | `commit-quiz.timeoutms` | `90000` | LLM call timeout |
@@ -167,7 +170,7 @@ bin/commit-quiz.mjs   thin CLI entry (args + top-level flow)
 src/config.js         env + git config resolution
 src/i18n.js           all user-facing copy (en, es)
 src/diff.js           reading the diff out of git
-src/providers.js      AI CLIs (claude/codex/gemini) + quiz generation
+src/providers.js      AI CLIs (claude/codex/gemini/copilot) + quiz generation
 src/ui/terminal.js    terminal prompt and rendering
 src/ui/dialogs.js     native dialogs (osascript / zenity)
 src/install.js        hook install/uninstall

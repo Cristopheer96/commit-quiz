@@ -26,8 +26,8 @@ export const I18N = {
     statementsLabel: 'Statements',
     truncated: '\n[... diff truncated for the quiz ...]',
     debugLogAt: (file) => `commit-quiz debug log: ${file}`,
-    errUnknownCli: (cli) => `COMMIT_QUIZ_CLI=${cli} is not a known provider (claude|codex|gemini)`,
-    errNoCli: 'no AI CLI found on PATH (claude, codex or gemini)',
+    errUnknownCli: (cli) => `COMMIT_QUIZ_CLI=${cli} is not a known provider (claude|codex|gemini|copilot)`,
+    errNoCli: 'no AI CLI found on PATH (claude, codex, gemini or copilot)',
     errCallFailed: (cli, detail) => `could not call ${cli} (${detail ?? 'no detail'})`,
     errNoJson: (cli) => `the ${cli} response contained no JSON`,
     errBadJson: 'could not parse the quiz JSON',
@@ -54,7 +54,7 @@ Usage:
 Configuration (env var overrides git config; git config can be --global or per repo):
   COMMIT_QUIZ=0                              skip the quiz once (escape hatch)
   COMMIT_QUIZ_MIN_LINES / commit-quiz.minlines   changed lines to trigger (default 20)
-  COMMIT_QUIZ_CLI       / commit-quiz.cli        provider: claude | codex | gemini
+  COMMIT_QUIZ_CLI       / commit-quiz.cli        provider: claude | codex | gemini | copilot
   COMMIT_QUIZ_MODEL     / commit-quiz.model      provider model (default haiku, claude only)
   COMMIT_QUIZ_LANG      / commit-quiz.lang       language: en | es (default: system locale)
   COMMIT_QUIZ_TIMEOUT_MS / commit-quiz.timeoutms LLM timeout in ms (default 90000)
@@ -88,8 +88,8 @@ own account. Nothing else is collected or sent anywhere. Details: README.md.
     statementsLabel: 'Afirmaciones',
     truncated: '\n[... diff truncado para el quiz ...]',
     debugLogAt: (file) => `log de depuración de commit-quiz: ${file}`,
-    errUnknownCli: (cli) => `COMMIT_QUIZ_CLI=${cli} no es un proveedor conocido (claude|codex|gemini)`,
-    errNoCli: 'no se encontró ningún CLI de IA (claude, codex o gemini) en el PATH',
+    errUnknownCli: (cli) => `COMMIT_QUIZ_CLI=${cli} no es un proveedor conocido (claude|codex|gemini|copilot)`,
+    errNoCli: 'no se encontró ningún CLI de IA (claude, codex, gemini o copilot) en el PATH',
     errCallFailed: (cli, detail) => `no se pudo llamar a ${cli} (${detail ?? 'sin detalle'})`,
     errNoJson: (cli) => `la respuesta de ${cli} no trajo JSON`,
     errBadJson: 'no se pudo parsear el JSON del quiz',
@@ -116,7 +116,7 @@ Uso:
 Configuración (la variable de entorno gana sobre git config; git config puede ser --global o por repo):
   COMMIT_QUIZ=0                              salta el quiz una vez (salida de emergencia)
   COMMIT_QUIZ_MIN_LINES / commit-quiz.minlines   líneas cambiadas para activarlo (default 20)
-  COMMIT_QUIZ_CLI       / commit-quiz.cli        proveedor: claude | codex | gemini
+  COMMIT_QUIZ_CLI       / commit-quiz.cli        proveedor: claude | codex | gemini | copilot
   COMMIT_QUIZ_MODEL     / commit-quiz.model      modelo del proveedor (default haiku, solo claude)
   COMMIT_QUIZ_LANG      / commit-quiz.lang       idioma: en | es (default: locale del sistema)
   COMMIT_QUIZ_TIMEOUT_MS / commit-quiz.timeoutms timeout del LLM en ms (default 90000)

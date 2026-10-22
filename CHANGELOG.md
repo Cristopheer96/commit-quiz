@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- GitHub Copilot CLI provider (`copilot -s --no-ask-user -p`), selectable with
+  `commit-quiz.cli copilot` and auto-detected after claude, codex and gemini.
+
+### Fixed
+- Gemini provider passed `-p` before `-m <model>`, so setting a model made
+  `-p` swallow `-m` as the prompt. `-p` now comes right before the prompt.
+
 ## [0.2.0] - 2026-10-21
 
 ### Added
