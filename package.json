@@ -1,6 +1,6 @@
 {
   "name": "commit-quiz",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Pre-commit hook that quizzes the developer on their staged diff — did you actually read your changes?",
   "type": "module",
   "bin": {
