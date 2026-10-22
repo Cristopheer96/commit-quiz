@@ -4,6 +4,7 @@
 // ones are true, the commit is aborted and the real summary is shown.
 //
 // Normal use (from a pre-commit hook):  node commit-quiz.mjs
+// Install into a repo:                  commit-quiz install [path]
 // Try it without staging anything:      node commit-quiz.mjs --range HEAD~1..HEAD
 //                                       node commit-quiz.mjs --diff-file changes.diff
 // Print the quiz with answers (no prompt): add --dry-run
@@ -13,12 +14,13 @@
 //   COMMIT_QUIZ_MIN_LINES=20   minimum changed lines to trigger the quiz
 //   COMMIT_QUIZ_CLI            provider: claude | codex | gemini (default: first one installed)
 //   COMMIT_QUIZ_MODEL          provider model (default: haiku, claude only)
-//   COMMIT_QUIZ_LANG           quiz/UI language: en | es (default: from system locale)
+//   COMMIT_QUIZ_LANG           quiz/UI language: en | es (default: git config commit-quiz.lang, then system locale)
 //   COMMIT_QUIZ_TIMEOUT_MS     LLM call timeout (default 90s)
 
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import tty from 'node:tty';
 import { fileURLToPath } from 'node:url';
 
 const MIN_CHANGED_LINES = Number(process.env.COMMIT_QUIZ_MIN_LINES ?? 20);
@@ -36,26 +38,44 @@ const EXCLUDES = [
   ':(exclude)*.svg',
 ];
 
+// ── terminal styling ─────────────────────────────────────────────────────────
+// Colors only when stderr is a real terminal; plain text otherwise (editor
+// output panes, log files).
+
+const COLORS_ON = tty.isatty(2);
+const paint = (code, text) => (COLORS_ON ? `\u001b[${code}m${text}\u001b[0m` : text);
+const bold = (t) => paint('1', t);
+const dim = (t) => paint('2', t);
+const red = (t) => paint('31', t);
+const green = (t) => paint('32', t);
+const yellow = (t) => paint('33', t);
+const cyan = (t) => paint('36', t);
+
 // ── i18n ─────────────────────────────────────────────────────────────────────
+// User-facing copy lives here, in English and Spanish. Everything else in the
+// codebase — identifiers, comments, prompts to the LLM — is English only.
 
 const I18N = {
   en: {
     languageName: 'English',
-    failOpen: (reason) => `⚠️  commit-quiz: ${reason} — allowing the commit.\n`,
-    generating: (cli, lines) => `🧠 commit-quiz: generating quiz with ${cli} over ${lines} changed lines…\n`,
-    quizHeader: '\n🧠 commit-quiz — did you read your changes? Mark the TRUE statements about your diff:\n\n',
-    answerPrompt: '\nTrue ones (e.g. 1,3): ',
-    dialogPrompt: 'Did you read your changes? Select the TRUE statements about your diff (cmd+click for several):',
-    correct: '✅ commit-quiz: correct. Commit allowed.\n',
-    wrongHeader: '\n❌ commit-quiz: that does not match your diff. What actually changes:\n\n',
-    answersLabel: '\nAnswers:\n',
-    reviewHint:
-      '\nReview your changes (git diff --cached) and try again.\n' +
-      'Justified escape hatch: COMMIT_QUIZ=0 git commit …\n',
-    summaryLabel: '— Diff summary —',
-    statementsLabel: '\n— Statements —',
-    trueMark: 'TRUE ',
-    falseMark: 'FALSE',
+    failOpen: (reason) => `${yellow('⚠')} commit-quiz: ${reason} — allowing the commit.\n`,
+    generating: (cli, lines) =>
+      `${cyan('🧠 commit-quiz')} ${dim(`· generating a quiz with ${cli} over ${lines} changed lines…`)}\n`,
+    notifyGenerating: '🧠 Reading your diff… the quiz opens in a few seconds.',
+    quizHeader: 'Did you read your changes? Mark the TRUE statements:',
+    answerPrompt: 'True ones (e.g. 1,3): ',
+    dialogPrompt: 'Did you read your changes?\nSelect the TRUE statements (⌘+click to pick several):',
+    passed: 'Nice — that matches your diff. Commit allowed.',
+    passedShort: '✅ Commit allowed',
+    failedTitle: 'That does not match your diff',
+    failedIntro: 'What this diff actually changes:',
+    answersLabel: 'Answers',
+    trueTag: 'TRUE',
+    falseTag: 'FALSE',
+    reviewHint: 'Review your changes (git diff --cached) and commit again.',
+    escapeHint: 'Justified escape hatch: COMMIT_QUIZ=0 git commit …',
+    summaryLabel: 'Diff summary',
+    statementsLabel: 'Statements',
     truncated: '\n[... diff truncated for the quiz ...]',
     errUnknownCli: (cli) => `COMMIT_QUIZ_CLI=${cli} is not a known provider (claude|codex|gemini)`,
     errNoCli: 'no AI CLI found on PATH (claude, codex or gemini)',
@@ -65,27 +85,31 @@ const I18N = {
     errBadShape: 'the quiz came back with an unexpected shape',
     errDiffFailed: (detail) => `could not read the diff (${detail})`,
     errNoPromptChannel: 'no terminal or dialog available to ask',
-    installedAt: (hook) => `✅ commit-quiz installed in ${hook}\n   To remove it: delete the block between the commit-quiz markers.\n`,
+    installedAt: (hook) =>
+      `✅ commit-quiz installed in ${hook}\n   To remove it: delete the block between the commit-quiz markers.\n`,
     alreadyInstalledAt: (hook) => `✅ commit-quiz was already installed in ${hook}\n`,
     errNotARepo: (target) => `❌ ${target} does not look like a git repo.\n`,
   },
   es: {
     languageName: 'Spanish',
-    failOpen: (reason) => `⚠️  commit-quiz: ${reason} — se permite el commit.\n`,
-    generating: (cli, lines) => `🧠 commit-quiz: generando quiz con ${cli} sobre ${lines} líneas cambiadas…\n`,
-    quizHeader: '\n🧠 commit-quiz — ¿leíste tus cambios? Marca las afirmaciones CIERTAS sobre tu diff:\n\n',
-    answerPrompt: '\nCiertas (ej: 1,3): ',
-    dialogPrompt: '¿Leíste tus cambios? Selecciona las afirmaciones CIERTAS sobre tu diff (cmd+clic para varias):',
-    correct: '✅ commit-quiz: correcto. Commit permitido.\n',
-    wrongHeader: '\n❌ commit-quiz: eso no coincide con tu diff. Lo que realmente cambia:\n\n',
-    answersLabel: '\nRespuestas:\n',
-    reviewHint:
-      '\nRevisa tus cambios (git diff --cached) y vuelve a intentar.\n' +
-      'Salida de emergencia justificada: COMMIT_QUIZ=0 git commit …\n',
-    summaryLabel: '— Resumen del diff —',
-    statementsLabel: '\n— Afirmaciones —',
-    trueMark: 'CIERTA',
-    falseMark: 'FALSA ',
+    failOpen: (reason) => `${yellow('⚠')} commit-quiz: ${reason} — se permite el commit.\n`,
+    generating: (cli, lines) =>
+      `${cyan('🧠 commit-quiz')} ${dim(`· generando un quiz con ${cli} sobre ${lines} líneas cambiadas…`)}\n`,
+    notifyGenerating: '🧠 Leyendo tu diff… el quiz aparece en unos segundos.',
+    quizHeader: '¿Leíste tus cambios? Marca las afirmaciones CIERTAS:',
+    answerPrompt: 'Ciertas (ej: 1,3): ',
+    dialogPrompt: '¿Leíste tus cambios?\nSelecciona las afirmaciones CIERTAS (⌘+clic para elegir varias):',
+    passed: 'Bien — eso coincide con tu diff. Commit permitido.',
+    passedShort: '✅ Commit permitido',
+    failedTitle: 'Eso no coincide con tu diff',
+    failedIntro: 'Lo que realmente cambia este diff:',
+    answersLabel: 'Respuestas',
+    trueTag: 'CIERTA',
+    falseTag: 'FALSA',
+    reviewHint: 'Revisa tus cambios (git diff --cached) y vuelve a commitear.',
+    escapeHint: 'Salida de emergencia justificada: COMMIT_QUIZ=0 git commit …',
+    summaryLabel: 'Resumen del diff',
+    statementsLabel: 'Afirmaciones',
     truncated: '\n[... diff truncado para el quiz ...]',
     errUnknownCli: (cli) => `COMMIT_QUIZ_CLI=${cli} no es un proveedor conocido (claude|codex|gemini)`,
     errNoCli: 'no se encontró ningún CLI de IA (claude, codex o gemini) en el PATH',
@@ -95,7 +119,8 @@ const I18N = {
     errBadShape: 'el quiz vino con forma inesperada',
     errDiffFailed: (detail) => `no se pudo leer el diff (${detail})`,
     errNoPromptChannel: 'no hay terminal ni diálogo disponible para preguntar',
-    installedAt: (hook) => `✅ commit-quiz instalado en ${hook}\n   Para quitarlo: borra el bloque entre los marcadores commit-quiz.\n`,
+    installedAt: (hook) =>
+      `✅ commit-quiz instalado en ${hook}\n   Para quitarlo: borra el bloque entre los marcadores commit-quiz.\n`,
     alreadyInstalledAt: (hook) => `✅ commit-quiz ya estaba instalado en ${hook}\n`,
     errNotARepo: (target) => `❌ ${target} no parece un repo git.\n`,
   },
@@ -104,6 +129,16 @@ const I18N = {
 function resolveLang() {
   const explicit = process.env.COMMIT_QUIZ_LANG;
   if (explicit) return I18N[explicit] ? explicit : 'en';
+  // git config also reaches hooks launched from the editor UI, where LANG is
+  // not inherited: git config --global commit-quiz.lang es
+  try {
+    const configured = execFileSync('git', ['config', 'commit-quiz.lang'], {
+      encoding: 'utf8',
+    }).trim();
+    if (I18N[configured]) return configured;
+  } catch {
+    // not configured: fall through to the locale
+  }
   const locale = process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || '';
   return locale.toLowerCase().startsWith('es') ? 'es' : 'en';
 }
@@ -176,18 +211,16 @@ function inMergeOrRebase() {
 // ── quiz generation ──────────────────────────────────────────────────────────
 
 function buildPrompt(diff) {
-  return `You are part of a pre-commit hook that verifies the developer actually read their changes.
-Analyze the following git diff and answer ONLY with valid JSON (no markdown, no \`\`\`), in this exact shape:
+  return `You are a pre-commit gate that checks whether the developer read their changes. Answer immediately with ONLY valid JSON (no markdown, no \`\`\`, no deliberation):
 
 {"summary": ["...", "..."], "statements": [{"text": "...", "is_true": true}, {"text": "...", "is_true": false}, ...]}
 
-Rules:
-- "summary": 3 to 5 short bullets describing what this diff actually changes.
-- "statements": exactly 4 statements about the diff: 2 true and 2 false, in random order.
-- Every statement must be verifiable by reading ONLY the diff (no intentions, no external context).
-- The false ones must be plausible to someone who did NOT read the diff: wrong file, inverted condition, different value or threshold, believable function name. Never absurd or obvious.
-- Statements must be concrete (file names, functions, values), one line each.
-- Write the summary and the statements in ${T.languageName}.
+- "summary": 3-5 short bullets on what the diff actually changes, behavior-level.
+- "statements": exactly 4 about the diff — 2 true + 2 false in random order, each one line, max 140 chars, concrete (file names, functions, exact values), decidable only by reading the diff.
+- False ones are near-misses of real facts: inverted condition, wrong value or default, real change attributed to the wrong (but existing) file/function, or claiming the pre-change behavior still holds.
+- Never bookkeeping: nothing about files being new/deleted/renamed, line or file counts, imports, formatting, or the change's purpose.
+- Prefer statements from different files/areas when the diff touches several.
+- Write summary and statements in ${T.languageName}.
 
 DIFF:
 ${diff}`;
@@ -196,10 +229,17 @@ ${diff}`;
 // Any AI CLI that takes a prompt and returns text will do.
 // Use the one requested via COMMIT_QUIZ_CLI, or the first one installed.
 const PROVIDERS = {
-  // prompt via stdin
-  claude: (model) => ({ args: ['-p', ...(model ? ['--model', model] : [])], viaStdin: true }),
+  // prompt via stdin; --strict-mcp-config skips the user's MCP servers and
+  // --effort low trims reasoning time
+  claude: (model) => ({
+    args: ['-p', '--strict-mcp-config', '--effort', 'low', ...(model ? ['--model', model] : [])],
+    viaStdin: true,
+  }),
   // prompt as argument; --skip-git-repo-check in case the hook runs in odd submodules
-  codex: (model) => ({ args: ['exec', '--skip-git-repo-check', ...(model ? ['--model', model] : [])], viaStdin: false }),
+  codex: (model) => ({
+    args: ['exec', '--skip-git-repo-check', ...(model ? ['--model', model] : [])],
+    viaStdin: false,
+  }),
   gemini: (model) => ({ args: ['-p', ...(model ? ['-m', model] : [])], viaStdin: false }),
 };
 
@@ -220,12 +260,21 @@ function generateQuiz(diff, cli) {
   const model = process.env.COMMIT_QUIZ_MODEL ?? (cli === 'claude' ? 'haiku' : undefined);
   const { args: cliArgs, viaStdin } = PROVIDERS[cli](model);
   const prompt = buildPrompt(diff);
-  const result = spawnSync(cli, viaStdin ? cliArgs : [...cliArgs, prompt], {
-    input: viaStdin ? prompt : undefined,
-    encoding: 'utf8',
-    timeout: LLM_TIMEOUT_MS,
-    maxBuffer: 16 * 1024 * 1024,
-  });
+  const run = (argList) =>
+    spawnSync(cli, viaStdin ? argList : [...argList, prompt], {
+      input: viaStdin ? prompt : undefined,
+      encoding: 'utf8',
+      timeout: LLM_TIMEOUT_MS,
+      maxBuffer: 16 * 1024 * 1024,
+      // extended thinking adds 30+ seconds per quiz with no quality gain here
+      env: { ...process.env, MAX_THINKING_TOKENS: '0' },
+    });
+  let result = run(cliArgs);
+  if ((result.error || result.status !== 0) && cliArgs.includes('--effort')) {
+    // older CLIs without --effort: retry without the flag
+    const stripped = cliArgs.filter((a, i) => a !== '--effort' && cliArgs[i - 1] !== '--effort');
+    result = run(stripped);
+  }
   if (result.error || result.status !== 0) {
     const detail = result.error?.message ?? result.stderr?.slice(0, 200);
     failOpen(T.errCallFailed(cli, detail));
@@ -243,9 +292,13 @@ function generateQuiz(diff, cli) {
   const ok =
     Array.isArray(quiz.summary) &&
     Array.isArray(quiz.statements) &&
-    quiz.statements.length >= 3 &&
     quiz.statements.every((s) => typeof s.text === 'string' && typeof s.is_true === 'boolean');
   if (!ok) failOpen(T.errBadShape);
+  // Models sometimes ignore "exactly 4": normalize to 2 true + 2 false.
+  const trueOnes = quiz.statements.filter((s) => s.is_true);
+  const falseOnes = quiz.statements.filter((s) => !s.is_true);
+  if (trueOnes.length < 2 || falseOnes.length < 2) failOpen(T.errBadShape);
+  quiz.statements = [...trueOnes.slice(0, 2), ...falseOnes.slice(0, 2)];
   return quiz;
 }
 
@@ -260,8 +313,39 @@ function shuffle(items) {
 
 // ── interaction ──────────────────────────────────────────────────────────────
 // git runs hooks without interactive stdin, so /dev/tty is opened directly.
-// With no terminal (commit from the editor UI), macOS falls back to a native
-// osascript dialog. With no GUI either: fail open.
+// With no real terminal (commit from the editor UI), macOS gets native
+// dialogs. With no GUI either: fail open.
+
+function canUseTty() {
+  // Editor-spawned git can still open /dev/tty when the editor was launched
+  // from a shell, but nobody is looking at that terminal. Only trust the tty
+  // when the hook's own stderr is one (i.e. the commit came from a terminal).
+  if (!tty.isatty(2)) return false;
+  try {
+    const fd = fs.openSync('/dev/tty', 'r+');
+    fs.closeSync(fd);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Fire-and-forget AppleScript (detached so neither generation nor the commit
+// waits on it).
+function osaDetached(script) {
+  spawn('osascript', ['-e', script], { stdio: 'ignore', detached: true }).unref();
+}
+
+// Immediate heads-up on editor-UI commits: with no terminal the "generating…"
+// line is invisible and the LLM wait looks like a hang. A self-dismissing
+// dialog is used because notifications depend on per-app permissions.
+function notify(message) {
+  if (process.platform !== 'darwin') return;
+  osaDetached(`tell application "System Events"
+activate
+display dialog ${JSON.stringify(message)} buttons {"OK"} default button "OK" giving up after 4 with title "commit-quiz"
+end tell`);
+}
 
 function askViaTty(statements) {
   let fd;
@@ -271,9 +355,9 @@ function askViaTty(statements) {
     return null;
   }
   const write = (text) => fs.writeSync(fd, text);
-  write(T.quizHeader);
-  statements.forEach((s, i) => write(`  ${i + 1}. ${s.text}\n`));
-  write(T.answerPrompt);
+  write(`\n${cyan('🧠 commit-quiz')} ${bold(T.quizHeader)}\n\n`);
+  statements.forEach((s, i) => write(`  ${cyan(`${i + 1}.`)} ${s.text}\n`));
+  write(`\n${bold(T.answerPrompt)}`);
   let line = '';
   const buf = Buffer.alloc(64);
   while (true) {
@@ -296,12 +380,16 @@ function askViaTty(statements) {
 function askViaDialog(statements) {
   if (process.platform !== 'darwin') return null;
   const items = statements.map((s, i) => `${i + 1}. ${s.text}`);
-  const script = `choose from list {${items
+  // activate: without it the dialog opens behind the editor window
+  const script = `tell application "System Events"
+activate
+choose from list {${items
     .map((t) => JSON.stringify(t))
-    .join(', ')}} with title "commit-quiz" with prompt ${JSON.stringify(
+    .join(', ')}} with title "🧠 commit-quiz" with prompt ${JSON.stringify(
     T.dialogPrompt,
-  )} with multiple selections allowed`;
-  const result = spawnSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 180_000 });
+  )} with multiple selections allowed
+end tell`;
+  const result = spawnSync('osascript', ['-e', script], { encoding: 'utf8', timeout: 600_000 });
   if (result.error || result.status !== 0) return null;
   const out = result.stdout.trim();
   if (out === 'false' || out === '') return new Set(); // cancelled or nothing selected
@@ -317,6 +405,37 @@ function parseAnswer(line, count) {
     if (n >= 1 && n <= count) picked.add(n - 1);
   }
   return picked;
+}
+
+// Editor-UI commits never show the hook's stderr up front, so the verdict gets
+// its own native dialog: a short self-dismissing one on success, a blocking
+// one with the real summary and answers on failure.
+function showResultDialog(correct, quiz, statements) {
+  if (process.platform !== 'darwin') return;
+  if (correct) {
+    osaDetached(`tell application "System Events"
+activate
+display dialog ${JSON.stringify(`${T.passedShort} — ${T.passed}`)} buttons {"OK"} default button "OK" giving up after 3 with title "commit-quiz"
+end tell`);
+    return;
+  }
+  const answers = statements
+    .map((s, i) => `${i + 1}. [${s.is_true ? T.trueTag : T.falseTag}] ${s.text}`)
+    .join('\n');
+  const body = [
+    T.failedIntro,
+    '',
+    quiz.summary.map((s) => `• ${s}`).join('\n'),
+    '',
+    `${T.answersLabel}:`,
+    answers,
+    '',
+    T.reviewHint,
+  ].join('\n');
+  osaDetached(`tell application "System Events"
+activate
+display dialog ${JSON.stringify(`❌ ${T.failedTitle}\n\n${body}`)} buttons {"OK"} default button "OK" with title "commit-quiz"
+end tell`);
 }
 
 // ── installer: `commit-quiz install [path]` ──────────────────────────────────
@@ -378,36 +497,44 @@ if (diff.length > MAX_DIFF_CHARS) {
 const cli = detectCli();
 if (!cli) failOpen(T.errNoCli);
 
+const useTerminal = canUseTty();
+if (!dryRun && !useTerminal) notify(T.notifyGenerating);
 process.stderr.write(T.generating(cli, changed));
 const quiz = generateQuiz(diff, cli);
 const statements = shuffle(quiz.statements);
 
 if (dryRun) {
-  console.log(T.summaryLabel);
+  console.log(bold(`— ${T.summaryLabel} —`));
   quiz.summary.forEach((s) => console.log(`  • ${s}`));
-  console.log(T.statementsLabel);
+  console.log(bold(`\n— ${T.statementsLabel} —`));
   statements.forEach((s, i) =>
-    console.log(`  ${i + 1}. [${s.is_true ? T.trueMark : T.falseMark}] ${s.text}`),
+    console.log(
+      `  ${i + 1}. ${s.is_true ? green(`[${T.trueTag}]`) : red(`[${T.falseTag}]`)} ${s.text}`,
+    ),
   );
   process.exit(0);
 }
 
-const picked = askViaTty(statements) ?? askViaDialog(statements);
+const picked = useTerminal ? askViaTty(statements) : askViaDialog(statements);
 if (picked === null) failOpen(T.errNoPromptChannel);
 
 const truth = new Set(statements.flatMap((s, i) => (s.is_true ? [i] : [])));
 const correct = picked.size === truth.size && [...truth].every((i) => picked.has(i));
 
+if (!useTerminal) showResultDialog(correct, quiz, statements);
+
 if (correct) {
-  process.stderr.write(T.correct);
+  process.stderr.write(`${green('✓')} commit-quiz: ${T.passed}\n`);
   process.exit(0);
 }
 
-process.stderr.write(T.wrongHeader);
+process.stderr.write(`\n${red('✗')} ${bold(`commit-quiz: ${T.failedTitle}.`)} ${T.failedIntro}\n\n`);
 quiz.summary.forEach((s) => process.stderr.write(`  • ${s}\n`));
-process.stderr.write(T.answersLabel);
+process.stderr.write(`\n${bold(`${T.answersLabel}:`)}\n`);
 statements.forEach((s, i) =>
-  process.stderr.write(`  ${i + 1}. [${s.is_true ? T.trueMark.trim() : T.falseMark.trim()}] ${s.text}\n`),
+  process.stderr.write(
+    `  ${i + 1}. ${s.is_true ? green(`✓ ${T.trueTag}`) : red(`✗ ${T.falseTag}`)}  ${s.text}\n`,
+  ),
 );
-process.stderr.write(T.reviewHint);
+process.stderr.write(`\n${T.reviewHint}\n${dim(T.escapeHint)}\n`);
 process.exit(1);
