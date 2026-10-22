@@ -176,9 +176,14 @@ src/ui/dialogs.js     native dialogs (osascript / zenity)
 src/install.js        hook install/uninstall
 ```
 
-No dependencies, no build step — plain Node ESM with JSDoc types. Releases are
-tagged `vX.Y.Z` and published to npm by the `release.yml` workflow (requires
-the `NPM_TOKEN` repo secret); see `CHANGELOG.md`.
+No dependencies, no build step — plain Node ESM with JSDoc types.
+
+To release: bump `version` in `package.json`, commit, then push a matching tag
+(`git tag v0.3.1 && git push origin v0.3.1`). The `release.yml` workflow
+publishes it to npm through
+[Trusted Publishing](https://docs.npmjs.com/trusted-publishers) (no token
+stored) and refuses to run if the tag and `package.json` disagree. See
+`CHANGELOG.md`.
 
 ## Known limitations
 

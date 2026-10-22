@@ -1,5 +1,6 @@
-# Publishes to npm when a v* tag is pushed.
-# Requires the NPM_TOKEN repository secret (npm automation token).
+# Publishes to npm when a v* tag is pushed, via npm Trusted Publishing (OIDC):
+# no token is stored. Configured once on npmjs.com -> commit-quiz -> Settings ->
+# Trusted Publisher -> GitHub Actions (Cristopheer96/commit-quiz, release.yml).
 name: Release
 
 on:
@@ -8,7 +9,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # npm provenance
+  id-token: write # OIDC token for trusted publishing and provenance
 
 jobs:
   publish:
@@ -17,8 +18,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: 'https://registry.npmjs.org'
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@11
       - run: node --check bin/commit-quiz.mjs
       # The tag must match package.json, or npm publishes the wrong version.
       - run: |
@@ -28,5 +31,3 @@ jobs:
             exit 1
           fi
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
