@@ -31,28 +31,44 @@ job.
   own session/account — no shared API key.
 - macOS for the native dialog (on Linux/Windows only the terminal mode works).
 
-## Install into a repo
+## Install
+
+Once per machine (no cloning needed):
 
 ```bash
-./install.sh /path/to/repo
+npm install -g github:Cristopheer96/commit-quiz
 ```
 
-Detects whether the repo uses husky (`.husky/pre-commit`) and appends itself at
-the end; otherwise it uses `.git/hooks/pre-commit`. Idempotent: running it
-twice does not duplicate anything.
+Then, once per repo you want guarded:
+
+```bash
+cd /path/to/repo
+commit-quiz install
+```
+
+That appends the hook line to `.husky/pre-commit` if the repo uses husky,
+otherwise to `.git/hooks/pre-commit`. Idempotent: running it twice does not
+duplicate anything. To uninstall, delete the block between the
+`commit-quiz` markers. (`./install.sh /path/to/repo` does the same from a
+cloned copy.)
+
+Why once per repo? Git only runs hooks configured in each repository — that is
+git's design, not the tool's. In husky repos the hook line is versioned, so
+**one teammate commits it and the whole team gets it**; each dev only needs the
+one-time `npm install -g`.
 
 ## Try it without staging anything
 
 ```bash
 # Quiz over a repo's last commit, with answers visible:
 cd /path/to/repo
-node /path/to/commit-quiz/bin/commit-quiz.mjs --range HEAD~1..HEAD --dry-run
+commit-quiz --range HEAD~1..HEAD --dry-run
 
 # Same but interactive (as the dev would see it):
-node /path/to/commit-quiz/bin/commit-quiz.mjs --range HEAD~1..HEAD
+commit-quiz --range HEAD~1..HEAD
 
 # Over a diff saved to a file:
-node /path/to/commit-quiz/bin/commit-quiz.mjs --diff-file changes.diff --dry-run
+commit-quiz --diff-file changes.diff --dry-run
 ```
 
 ## Configuration (environment variables)

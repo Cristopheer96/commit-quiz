@@ -1,0 +1,31 @@
+{
+  "name": "commit-quiz",
+  "version": "0.1.0",
+  "description": "Pre-commit hook that quizzes the developer on their staged diff — did you actually read your changes?",
+  "type": "module",
+  "bin": {
+    "commit-quiz": "bin/commit-quiz.mjs"
+  },
+  "files": [
+    "bin",
+    "install.sh",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cristopheer96/commit-quiz.git"
+  },
+  "keywords": [
+    "git",
+    "pre-commit",
+    "hook",
+    "ai",
+    "code-review",
+    "llm"
+  ],
+  "author": "Cristopher Huaroc",
+  "license": "MIT"
+}

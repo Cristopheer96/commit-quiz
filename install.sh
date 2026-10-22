@@ -25,10 +25,17 @@ if grep -q 'commit-quiz' "$HOOK"; then
   exit 0
 fi
 
+# Prefer the global command (npm install -g); fall back to this copy's path.
+if command -v commit-quiz >/dev/null 2>&1; then
+  RUN="commit-quiz"
+else
+  RUN="node \"$QUIZ\""
+fi
+
 cat >> "$HOOK" <<EOF
 
 # >>> commit-quiz >>>
-node "$QUIZ" || exit 1
+$RUN || exit 1
 # <<< commit-quiz <<<
 EOF
 chmod +x "$HOOK"

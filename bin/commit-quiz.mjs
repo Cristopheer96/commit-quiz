@@ -18,6 +18,8 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const MIN_CHANGED_LINES = Number(process.env.COMMIT_QUIZ_MIN_LINES ?? 20);
 const LLM_TIMEOUT_MS = Number(process.env.COMMIT_QUIZ_TIMEOUT_MS ?? 90_000);
@@ -63,6 +65,9 @@ const I18N = {
     errBadShape: 'the quiz came back with an unexpected shape',
     errDiffFailed: (detail) => `could not read the diff (${detail})`,
     errNoPromptChannel: 'no terminal or dialog available to ask',
+    installedAt: (hook) => `✅ commit-quiz installed in ${hook}\n   To remove it: delete the block between the commit-quiz markers.\n`,
+    alreadyInstalledAt: (hook) => `✅ commit-quiz was already installed in ${hook}\n`,
+    errNotARepo: (target) => `❌ ${target} does not look like a git repo.\n`,
   },
   es: {
     languageName: 'Spanish',
@@ -90,6 +95,9 @@ const I18N = {
     errBadShape: 'el quiz vino con forma inesperada',
     errDiffFailed: (detail) => `no se pudo leer el diff (${detail})`,
     errNoPromptChannel: 'no hay terminal ni diálogo disponible para preguntar',
+    installedAt: (hook) => `✅ commit-quiz instalado en ${hook}\n   Para quitarlo: borra el bloque entre los marcadores commit-quiz.\n`,
+    alreadyInstalledAt: (hook) => `✅ commit-quiz ya estaba instalado en ${hook}\n`,
+    errNotARepo: (target) => `❌ ${target} no parece un repo git.\n`,
   },
 };
 
@@ -310,6 +318,43 @@ function parseAnswer(line, count) {
   }
   return picked;
 }
+
+// ── installer: `commit-quiz install [path]` ──────────────────────────────────
+// Appends the hook line to .husky/pre-commit (if the repo uses husky) or to
+// .git/hooks/pre-commit. Idempotent: the marker block is never duplicated.
+
+function installHook(target) {
+  if (!fs.existsSync(path.join(target, '.git'))) {
+    process.stderr.write(T.errNotARepo(target));
+    process.exit(1);
+  }
+  const huskyDir = path.join(target, '.husky');
+  const hookPath = fs.existsSync(huskyDir)
+    ? path.join(huskyDir, 'pre-commit')
+    : path.join(target, '.git', 'hooks', 'pre-commit');
+
+  const current = fs.existsSync(hookPath)
+    ? fs.readFileSync(hookPath, 'utf8')
+    : '#!/usr/bin/env sh\n';
+  if (current.includes('commit-quiz')) {
+    process.stdout.write(T.alreadyInstalledAt(hookPath));
+    process.exit(0);
+  }
+
+  // Prefer the global command; fall back to this file's absolute path.
+  const onPath = spawnSync('which', ['commit-quiz'], { encoding: 'utf8' }).status === 0;
+  const runLine = onPath ? 'commit-quiz' : `node ${JSON.stringify(fileURLToPath(import.meta.url))}`;
+
+  fs.writeFileSync(
+    hookPath,
+    `${current}\n# >>> commit-quiz >>>\n${runLine} || exit 1\n# <<< commit-quiz <<<\n`,
+  );
+  fs.chmodSync(hookPath, 0o755);
+  process.stdout.write(T.installedAt(hookPath));
+  process.exit(0);
+}
+
+if (args[0] === 'install') installHook(path.resolve(args[1] ?? process.cwd()));
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
