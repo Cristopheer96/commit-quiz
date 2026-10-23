@@ -6,7 +6,7 @@ the code and the dev just hits "commit" without reviewing.
 
 Every AI code-review tool reviews the code. This one quizzes **you**.
 
-![commit-quiz asks four statements about your staged diff; a wrong answer aborts the commit and shows what actually changed](docs/demo.gif)
+![commit-quiz asks four statements about your staged diff; a wrong answer aborts the commit and shows what actually changed, and after reading the diff the retry passes](docs/demo.gif)
 
 ```bash
 npm install -g commit-quiz
